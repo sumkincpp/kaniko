@@ -97,16 +97,6 @@ func (c *CopyCommand) ExecuteCommand(config *v1.Config, buildArgs *dockerfile.Bu
 				return errors.Wrap(err, "copying dir")
 			}
 			c.snapshotFiles = append(c.snapshotFiles, copiedFiles...)
-		} else if util.IsSymlink(fi) {
-			// If file is a symlink, we want to copy the target file to destPath
-			exclude, err := util.CopySymlink(fullPath, destPath, c.fileContext)
-			if err != nil {
-				return errors.Wrap(err, "copying symlink")
-			}
-			if exclude {
-				continue
-			}
-			c.snapshotFiles = append(c.snapshotFiles, destPath)
 		} else {
 			// ... Else, we want to copy over a file
 			exclude, err := util.CopyFile(fullPath, destPath, c.fileContext, uid, gid)
