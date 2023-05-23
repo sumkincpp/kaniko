@@ -639,6 +639,11 @@ func DetermineTargetFileOwnership(fi os.FileInfo, uid, gid int64) (int64, int64)
 	return uid, gid
 }
 
+type fileID struct {
+	dev uint64
+	ino uint64
+}
+
 // CopyDir copies the file or directory at src to dest
 // It returns a list of files it copied over
 func CopyDir(src, dest string, context FileContext, uid, gid int64) ([]string, error) {
@@ -647,6 +652,9 @@ func CopyDir(src, dest string, context FileContext, uid, gid int64) ([]string, e
 		return nil, errors.Wrap(err, "copying dir")
 	}
 	var copiedFiles []string
+	// This is a map of source file inodes to dst file paths
+	copiedFilesInodes := make(map[fileID]string)
+
 	for _, file := range files {
 		fullPath := filepath.Join(src, file)
 		fi, err := os.Lstat(fullPath)
@@ -672,9 +680,25 @@ func CopyDir(src, dest string, context FileContext, uid, gid int64) ([]string, e
 				return nil, err
 			}
 		} else {
-			// ... Else, we want to copy over a file
-			if _, err := CopyFile(fullPath, destPath, context, uid, gid); err != nil {
-				return nil, err
+
+			stat, ok := fi.Sys().(*syscall.Stat_t)
+
+			if !ok {
+				return nil, fmt.Errorf("unable to get raw syscall.Stat_t data for %s", fullPath)
+			}
+
+			id := fileID{dev: uint64(stat.Dev), ino: stat.Ino}
+
+			if hardLinkDstPath, ok := copiedFilesInodes[id]; ok {
+				logrus.Debugf("Making hardlink for file %s [%s -> %s]", fullPath, hardLinkDstPath, destPath)
+				if err := os.Link(hardLinkDstPath, destPath); err != nil {
+					return nil, err
+				}
+			} else {
+				if _, err := CopyFile(fullPath, destPath, context, uid, gid); err != nil {
+					return nil, err
+				}
+				copiedFilesInodes[id] = destPath
 			}
 		}
 		copiedFiles = append(copiedFiles, destPath)

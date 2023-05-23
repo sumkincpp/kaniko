@@ -742,10 +742,13 @@ func DoBuild(opts *config.KanikoOptions) (v1.Image, error) {
 					stageIdxToDigest[strconv.Itoa(index)],
 				))
 		}
-		for _, p := range filesToSave {
-			logrus.Infof("Saving file %s for later use", p)
-			if err := util.CopyFileOrSymlink(p, dstDir, config.RootDir); err != nil {
-				return nil, errors.Wrap(err, "could not save file")
+		for _, src := range filesToSave {
+			logrus.Infof("Saving file %s for later use", src)
+
+			destFile := filepath.Join(dstDir, src)
+
+			if _, err := util.CopyDir(src, destFile, util.FileContext{}, util.DoNotChangeUID, util.DoNotChangeGID); err != nil {
+				return nil, err
 			}
 		}
 
